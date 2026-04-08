@@ -16,25 +16,33 @@ const LinkField = ({
   titleGetter = (item) => item.name,
 }) => {
   const t = useTranslation();
-  const [active, setActive] = useState(false);
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState();
   const [linked, setLinked] = useState();
+  const [selected, setSelected] = useState();
   const [updated, setUpdated] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
 
   useEffectAsync(async () => {
-    if (active) {
-      const response = await fetchOrThrow(endpointAll);
-      setItems(await response.json());
+    setLoading(true);
+    setError(false);
+    try {
+      const [allResponse, linkedResponse] = await Promise.all([
+        fetchOrThrow(endpointAll),
+        fetchOrThrow(endpointLinked),
+      ]);
+      const allItems = await allResponse.json();
+      const linkedItems = await linkedResponse.json();
+      setItems(allItems);
+      setLinked(linkedItems);
+      setSelected(linkedItems);
+    } catch (e) {
+      setError(true);
+    } finally {
+      setLoading(false);
     }
-  }, [active]);
-
-  useEffectAsync(async () => {
-    if (active) {
-      const response = await fetchOrThrow(endpointLinked);
-      setLinked(await response.json());
-    }
-  }, [active]);
+  }, [endpointAll, endpointLinked]);
 
   const createBody = (linkId) => {
     const body = {};
@@ -74,6 +82,7 @@ const LinkField = ({
         await Promise.all(results);
         setUpdated(results.length > 0);
         setLinked(value);
+        setSelected(value);
       }
     },
     [linked, setUpdated, setLinked],
@@ -82,7 +91,8 @@ const LinkField = ({
   return (
     <>
       <Autocomplete
-        loading={active && !items}
+        loading={loading}
+        disabled={loading || error}
         isOptionEqualToValue={(i1, i2) => keyGetter(i1) === keyGetter(i2)}
         options={items || []}
         getOptionLabel={(item) => titleGetter(item)}
@@ -91,15 +101,16 @@ const LinkField = ({
             {...params}
             label={label}
             slotProps={{ inputLabel: { shrink: true } }}
-            placeholder={!active ? t('reportShow') : null}
+            placeholder={t('reportShow')}
+            error={error}
+            helperText={error ? t('sharedError') : null}
           />
         )}
-        value={(items && linked) || []}
+        value={selected || []}
         onChange={(_, value) => onChange(value)}
         open={open}
         onOpen={() => {
           setOpen(true);
-          setActive(true);
         }}
         onClose={() => setOpen(false)}
         multiple
